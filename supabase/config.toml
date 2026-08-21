@@ -1,0 +1,2 @@
+[functions.new-ticket-email]
+verify_jwt = false

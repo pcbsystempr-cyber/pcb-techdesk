@@ -54,7 +54,15 @@ export async function createPublicTicket(payload){
     p_impact: payload.impact || null
   });
   if (error) throw error;
-  return Array.isArray(data) ? data[0] : data;
+  const created = Array.isArray(data) ? data[0] : data;
+  const { error: notificationError } = await supabase.functions.invoke('new-ticket-email', {
+    body: { ticket_id: created.ticket_id, tracking_token: created.tracking_token }
+  });
+  if (notificationError) {
+    console.error('No se pudo enviar la notificación de la boleta.', notificationError);
+    created.email_warning = 'La boleta se guardó, pero no se pudo enviar la notificación por email.';
+  }
+  return created;
 }
 
 export async function registerPublicAttachment(ticketId, token, meta){

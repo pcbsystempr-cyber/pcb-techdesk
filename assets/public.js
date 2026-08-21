@@ -126,7 +126,7 @@ form?.addEventListener('submit',async e=>{
     window.PCBStaffUI?.reset();
     issue.innerHTML='<option value="">Primero selecciona el tipo</option>';issue.disabled=true;
     qs('#departmentOtherField').classList.add('hidden');qs('#roomOtherField').classList.add('hidden');
-    toast('Boleta creada correctamente');
+    toast(created.email_warning || 'Boleta creada y notificación enviada', created.email_warning ? 'error' : undefined);
     if(location.protocol!=='file:') history.replaceState(null,'',`?track=${created.tracking_token}#seguimiento`);
     qs('#successBox').scrollIntoView({behavior:'smooth',block:'center'});
   }catch(err){

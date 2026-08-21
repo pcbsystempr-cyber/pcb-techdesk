@@ -104,6 +104,16 @@ La Edge Function incluida espera estos secretos:
 
 Después de desplegar la función `weekly-report`, programa su ejecución con Supabase Cron. Guarda secretos únicamente en el backend/Vault; nunca en el repositorio público.
 
+## Email automático al crear una boleta
+
+La Edge Function `new-ticket-email` envía una notificación interna después de guardar cada boleta. Configura estos secretos en **Supabase Dashboard → Edge Functions → Secrets**:
+
+- `RESEND_API_KEY`: clave privada de Resend.
+- `NEW_TICKET_TO`: uno o varios destinatarios separados por comas.
+- `NEW_TICKET_FROM`: remitente de un dominio verificado, por ejemplo `PCB TechDesk <boletas@tudominio.com>`.
+
+Despliega la función con `supabase functions deploy new-ticket-email`. El archivo `supabase/config.toml` permite invocarla con la clave pública moderna de Supabase; dentro de la función se validan esa clave y el token privado de la boleta antes del envío. Para pruebas, Resend permite usar `onboarding@resend.dev` como remitente con las restricciones propias de su modo de prueba. La clave de Resend nunca debe colocarse en `assets/config.js`.
+
 ## Migración del sistema anterior
 
 No recomiendo copiar el sistema anterior completo. Migra **datos**, no la arquitectura.
