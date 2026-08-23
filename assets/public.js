@@ -117,17 +117,14 @@ form?.addEventListener('submit',async e=>{
   try{
     const created=await createPublicTicket(payload);
     for(const f of files) await uploadPublicAttachment(created.ticket_id,created.tracking_token,f);
-    const base=location.origin==='null'?location.href.split('?')[0].split('#')[0]:`${location.origin}${location.pathname}`;
-    const url=`${base}?track=${created.tracking_token}#seguimiento`;
     qs('#successTicketNo').textContent=created.ticket_no;
-    qs('#successTracking').value=url;
+    qs('#successTracking').value=created.ticket_no;
     qs('#successBox').classList.remove('hidden');
     form.reset();files=[];renderFiles();
     window.PCBStaffUI?.reset();
     issue.innerHTML='<option value="">Primero selecciona el tipo</option>';issue.disabled=true;
     qs('#departmentOtherField').classList.add('hidden');qs('#roomOtherField').classList.add('hidden');
     toast(created.email_warning || 'Boleta creada y notificación enviada', created.email_warning ? 'error' : undefined);
-    if(location.protocol!=='file:') history.replaceState(null,'',`?track=${created.tracking_token}#seguimiento`);
     qs('#successBox').scrollIntoView({behavior:'smooth',block:'center'});
   }catch(err){
     qs('#submitNotice').textContent=err.message||'No se pudo crear la boleta.';
@@ -139,7 +136,13 @@ form?.addEventListener('submit',async e=>{
 
 qs('#copyTracking')?.addEventListener('click',async()=>{
   const value=qs('#successTracking').value;
-  try{await navigator.clipboard.writeText(value);toast('Enlace copiado')}catch{qs('#successTracking').select();document.execCommand('copy');toast('Enlace copiado')}
+  const button=qs('#copyTracking');
+  const confirmCopy=()=>{
+    button.textContent='Copiado';
+    toast('Copiado');
+    setTimeout(()=>{button.textContent='Copiar código'},1800);
+  };
+  try{await navigator.clipboard.writeText(value);confirmCopy()}catch{qs('#successTracking').select();document.execCommand('copy');confirmCopy()}
 });
 
 async function doTrack(token){
@@ -148,7 +151,7 @@ async function doTrack(token){
   box.innerHTML='<div class="notice info">Buscando boleta…</div>';
   try{
     const t=await trackPublicTicket(token);
-    if(!t){box.innerHTML='<div class="notice error">No encontramos esa boleta. Verifica el token o número.</div>';return}
+    if(!t){box.innerHTML='<div class="notice error">No encontramos esa boleta. Verifica el código.</div>';return}
     box.innerHTML=`<div class="card tracking-result"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><div class="eyebrow">${esc(t.ticket_no)}</div><h3 style="margin:12px 0 5px">${esc(t.category||'Servicio técnico')}</h3><div style="color:var(--muted);font-size:11px">Creada ${fmtDate(t.created_at)}</div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${statusPill(t.status)}${priorityPill(t.priority)}</div></div><div class="detail-grid" style="margin-top:15px"><div class="detail-box"><span>Técnico asignado</span><strong>${esc(t.assigned_name||'Aún no asignado')}</strong></div><div class="detail-box"><span>Ubicación</span><strong>${esc(t.room||'No indicada')}</strong></div><div class="detail-box detail-full"><span>Última actualización</span><strong>${fmtDate(t.updated_at)}</strong></div>${t.resolution_summary?`<div class="detail-box detail-full"><span>Solución / cierre</span><strong>${esc(t.resolution_summary)}</strong></div>`:''}</div>${['resolved','closed'].includes(t.status)?`<div class="drawer-section"><h3>Evalúa el servicio</h3><div class="form-grid"><div class="field"><label>Calificación</label><select id="publicRating"><option value="5">★★★★★ Excelente</option><option value="4">★★★★ Muy bueno</option><option value="3">★★★ Bueno</option><option value="2">★★ Regular</option><option value="1">★ Necesita mejorar</option></select></div><div class="field"><label>Comentario</label><input id="publicComment" placeholder="Opcional"></div><div class="field full"><label>Sugerencia</label><input id="publicSuggestion" placeholder="Opcional"></div></div><div class="form-actions"><button class="btn btn-success" id="sendEvaluation">Enviar evaluación</button></div></div>`:''}</div>`;
     qs('#sendEvaluation')?.addEventListener('click',async()=>{try{await submitEvaluation(token,Number(qs('#publicRating').value),qs('#publicComment').value,qs('#publicSuggestion').value);toast('Gracias por evaluar el servicio')}catch(err){toast(err.message,'error')}});
   }catch(err){box.innerHTML=`<div class="notice error">${esc(err.message||'Error al buscar la boleta.')}</div>`}

@@ -104,7 +104,7 @@ export async function trackPublicTicket(token){
 export async function submitEvaluation(token, rating, comments, suggestions){
   if (DEMO_MODE) {
     const rows = JSON.parse(localStorage.getItem(DEMO_TICKETS_KEY) || '[]');
-    const i = rows.findIndex(x => x.tracking_token === token);
+    const i = rows.findIndex(x => x.tracking_token === token || x.ticket_no.toLowerCase() === String(token).toLowerCase());
     if (i < 0) throw new Error('Boleta no encontrada.');
     rows[i].evaluation_rating = rating; rows[i].evaluation_comments = comments; rows[i].evaluation_suggestions = suggestions;
     localStorage.setItem(DEMO_TICKETS_KEY, JSON.stringify(rows)); return true;

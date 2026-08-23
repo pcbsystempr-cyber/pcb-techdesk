@@ -223,6 +223,7 @@ language sql security definer stable set search_path=public,pg_temp as $$
          p.full_name
   from public.tickets t left join public.profiles p on p.id=t.assigned_to
   where t.tracking_token::text=p_tracking_token
+     or lower(t.ticket_no)=lower(trim(p_tracking_token))
   limit 1;
 $$;
 
@@ -242,7 +243,9 @@ returns boolean language plpgsql security definer set search_path=public,pg_temp
 declare tid uuid;
 begin
   if p_rating<1 or p_rating>5 then raise exception 'Calificación inválida.'; end if;
-  select id into tid from public.tickets where tracking_token::text=p_tracking_token and status in ('resolved','closed');
+  select id into tid from public.tickets
+  where (tracking_token::text=p_tracking_token or lower(ticket_no)=lower(trim(p_tracking_token)))
+    and status in ('resolved','closed');
   if tid is null then raise exception 'La boleta no existe o aún no puede evaluarse.'; end if;
   insert into public.service_evaluations(ticket_id,rating,comments,suggestions)
   values(tid,p_rating,nullif(trim(p_comments),''),nullif(trim(p_suggestions),''))

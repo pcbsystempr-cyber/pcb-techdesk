@@ -321,15 +321,15 @@
 
           <div id="successBox" class="notice success hidden" style="margin:0 24px 22px">
             <strong>✅ Boleta creada: <span id="successTicketNo"></span></strong>
-            <p style="margin:6px 0;color:#58705f">Guarda el enlace para consultar el estado sin iniciar sesión.</p>
-            <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="successTracking" readonly style="flex:1;min-width:220px;background:#fff;border:1px solid #cfe1d5;padding:10px;border-radius:10px"><button id="copyTracking" class="btn btn-secondary btn-sm" type="button">Copiar enlace</button></div>
+            <p style="margin:6px 0;color:#58705f">Guarda este código para consultar el estado de la boleta.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="successTracking" aria-label="Código de boleta" readonly style="flex:1;min-width:220px;background:#fff;border:1px solid #cfe1d5;padding:10px;border-radius:10px"><button id="copyTracking" class="btn btn-secondary btn-sm" type="button">Copiar código</button></div>
           </div>
         </section>
       </div>
 
       <section class="tracking-area" id="seguimiento">
-        <div class="section-head"><div><span class="eyebrow">Seguimiento</span><h2 style="margin-top:10px">Consulta una boleta</h2><p>Pega el token o número de boleta.</p></div></div>
-        <div class="card tracking-box"><input id="trackInput" placeholder="Ej. PCB-2026-00024 o token de seguimiento"><button class="btn btn-primary" id="trackBtn">Buscar</button></div>
+        <div class="section-head"><div><span class="eyebrow">Seguimiento</span><h2 style="margin-top:10px">Consulta una boleta</h2><p>Escribe o pega el código de la boleta.</p></div></div>
+        <div class="card tracking-box"><input id="trackInput" placeholder="Ej. PCB-2026-00024"><button class="btn btn-primary" id="trackBtn">Buscar</button></div>
         <div id="trackResult"></div>
       </section>
     </div>
