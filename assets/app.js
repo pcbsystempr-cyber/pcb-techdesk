@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { DEMO_MODE, getSession, signOut, listTickets, listTechnicians, getTicket, signedAttachmentUrl, updateTicket, assignTicket, claimTicket, resolveTicket, closeTicket, saveTicketSignoff, addTicketNote, subscribeTickets } from './db.js';
+import { DEMO_MODE, getSession, signOut, listTickets, listTechnicians, createTechnician, getTicket, signedAttachmentUrl, updateTicket, assignTicket, resolveTicket, closeTicket, saveTicketSignoff, addTicketNote, subscribeTickets } from './db.js';
 import { qs, qsa, esc, fmtDate, statusPill, priorityPill, statusLabel, isOverdue, toast } from './utils.js';
 
 let profile=null,tickets=[],technicians=[],currentId=null;
@@ -9,6 +9,10 @@ async function boot(){
   profile=await getSession(); if(!profile){location.href='login.html';return}
   qs('#userName').textContent=profile.full_name||'Usuario';
   qs('#userRole').textContent=profile.role==='admin'?'Administrador':'Técnico';
+  qs('#dashboardTitle').textContent=profile.role==='admin'?'Panel administrativo':'Panel del técnico';
+  qs('#dashboardSubtitle').textContent=profile.role==='admin'?'Asigna boletas y supervisa todo el servicio técnico':'Consulta y resuelve las boletas que te fueron asignadas';
+  qs('#ticketsTitle').textContent=profile.role==='admin'?'Todas las boletas':'Mis boletas asignadas';
+  qs('#ticketsSubtitle').textContent=profile.role==='admin'?'Busca, filtra y asigna las solicitudes del servicio.':'Aquí aparecen únicamente las boletas asignadas a tu cuenta.';
   const initials=(profile.full_name||'PCB').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
   qs('#userAvatar').textContent=initials||'PCB';
   if(profile.role!=='admin') qsa('[data-admin-only]').forEach(x=>x.classList.add('hidden'));
@@ -27,11 +31,24 @@ function setupHandlers(){
   qs('#drawerBackdrop').onclick=closeDrawer;qs('#drawerClose').onclick=closeDrawer;
   qs('#drawerBody').addEventListener('click',drawerAction);
   qs('#drawerBody').addEventListener('change',drawerChange);
+  qs('#addTechnicianBtn')?.addEventListener('click',()=>qs('#technicianDialog').showModal());
+  qs('#cancelTechnician')?.addEventListener('click',()=>qs('#technicianDialog').close());
+  qs('#technicianForm')?.addEventListener('submit',submitTechnician);
+}
+
+async function submitTechnician(e){
+  e.preventDefault();const button=qs('#saveTechnician');const notice=qs('#technicianNotice');
+  notice.classList.add('hidden');button.disabled=true;button.textContent='Creando…';
+  try{
+    await createTechnician({full_name:qs('#technicianName').value.trim(),email:qs('#technicianEmail').value.trim(),password:qs('#technicianPassword').value});
+    technicians=await listTechnicians();e.target.reset();qs('#technicianDialog').close();render();toast('Técnico añadido al menú de asignación');
+  }catch(err){notice.textContent=err.message||'No se pudo crear el técnico.';notice.classList.remove('hidden')}
+  finally{button.disabled=false;button.textContent='Crear técnico'}
 }
 
 async function refresh(){
   const search=qs('#searchInput').value.trim();const status=qs('#statusFilter').value;
-  tickets=await listTickets({search,status:status||undefined});render(); if(currentId) openTicket(currentId,false);
+  tickets=await listTickets({search,status:status||undefined,assigned_to:profile.role==='technician'?profile.id:undefined});render(); if(currentId) openTicket(currentId,false);
 }
 
 function startOfToday(){const d=new Date();d.setHours(0,0,0,0);return d}
@@ -105,9 +122,8 @@ async function openTicket(id,animate=true){
     ${attachmentLinks.length?`<div class="drawer-section"><h3>Evidencia adjunta</h3><div class="action-grid">${attachmentLinks.map(a=>a.url?`<a class="btn btn-secondary btn-sm" href="${esc(a.url)}" target="_blank" rel="noopener">📎 ${esc(a.file_name)}</a>`:`<span class="file-chip">${esc(a.file_name)}</span>`).join('')}</div></div>`:''}
     <div class="drawer-section"><h3>Acciones</h3><div class="action-grid">
       ${profile.role==='admin'?`<select id="assignSelect" class="btn btn-secondary" style="appearance:auto"><option value="">Asignar técnico…</option>${techOptions}</select>`:''}
-      ${profile.role!=='admin'&&!t.assigned_to?`<button class="btn btn-secondary btn-sm" data-action="claim">Tomar boleta</button>`:''}
       ${!['resolved','closed','cancelled'].includes(t.status)?`<button class="btn btn-secondary btn-sm" data-action="status" data-status="in_progress">Iniciar trabajo</button><button class="btn btn-secondary btn-sm" data-action="status" data-status="awaiting_user">Esperando usuario</button><button class="btn btn-secondary btn-sm" data-action="status" data-status="awaiting_parts">Esperando pieza</button>`:''}
-      ${t.status==='resolved'?`<button class="btn btn-success btn-sm" data-action="close">Cerrar boleta</button>`:''}
+      ${profile.role==='admin'&&t.status==='resolved'?`<button class="btn btn-success btn-sm" data-action="close">Cerrar boleta</button>`:''}
     </div></div>
     ${!['resolved','closed','cancelled'].includes(t.status)?`<div class="drawer-section"><h3>Documentar solución</h3><form id="resolutionForm" class="resolution-form"><div class="field full"><label>Diagnóstico *</label><textarea id="diagnosis" required placeholder="Qué se encontró durante el diagnóstico">${esc(t.diagnosis||'')}</textarea></div><div class="field full"><label>Solución implementada *</label><textarea id="resolution" required placeholder="Qué se hizo para resolver el problema">${esc(t.resolution_summary||'')}</textarea></div><div class="field"><label>Causa raíz</label><input id="rootCause" value="${esc(t.root_cause||'')}" placeholder="Opcional"></div><div class="field"><label>Minutos invertidos</label><input id="minutes" type="number" min="0" value="${Number(t.minutes_spent||0)}"></div><div class="field full"><label>Piezas / materiales</label><input id="partsUsed" placeholder="Ej. cable HDMI, filamento, teclado…"></div><div class="field full"><button class="btn btn-primary" type="submit">Resolver boleta</button></div></form></div>`:''}
     ${['resolved','closed'].includes(t.status)?`<div class="drawer-section"><h3>Conformidad del servicio</h3>${t.requester_signoff_name?`<div class="notice success"><strong>Conformidad registrada por:</strong> ${esc(t.requester_signoff_name)}<br><span style="color:var(--muted)">${fmtDate(t.requester_signoff_at)}</span></div>`:t.status==='resolved'?`<div class="field"><label>Nombre del maestro / personal que recibe</label><input id="signoffName" placeholder="Nombre completo"></div><div style="margin-top:10px"><canvas id="signoffCanvas" width="560" height="150" style="width:100%;height:150px;background:#fff;border-radius:12px;touch-action:none"></canvas></div><div class="action-grid" style="margin-top:8px"><button class="btn btn-secondary btn-sm" type="button" id="clearSignoff">Borrar firma</button><button class="btn btn-success btn-sm" type="button" id="saveSignoff">Guardar conformidad</button></div>`:''}</div>`:''}
@@ -132,7 +148,6 @@ function setupSignoffPad(t){
 function closeDrawer(){currentId=null;qs('#drawerBackdrop').classList.remove('show');qs('#ticketDrawer').classList.remove('show')}
 async function drawerAction(e){
   const b=e.target.closest('[data-action]');if(!b||!currentId)return;try{
-    if(b.dataset.action==='claim'){await claimTicket(currentId);toast('Boleta asignada a tu cuenta')}
     if(b.dataset.action==='status'){await updateTicket(currentId,{status:b.dataset.status});toast(`Estado: ${statusLabel(b.dataset.status)}`)}
     if(b.dataset.action==='close'){await closeTicket(currentId);toast('Boleta cerrada')}
     if(b.dataset.action==='note'){const body=qs('#noteBody').value.trim();if(body){await addTicketNote(currentId,body,false);toast('Nota guardada')}}

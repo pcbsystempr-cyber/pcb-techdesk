@@ -1,4 +1,4 @@
-const CACHE='pcb-techdesk-v2-2-3-shell-4';
+const CACHE='pcb-techdesk-v2-2-3-shell-6';
 const SHELL=['./','./index.html','./login.html','./app.html','./reports.html','./assets/styles.css','./assets/config.js','./assets/db.js','./assets/utils.js','./assets/public.js','./assets/staff-ui.js','./assets/staff.js','./assets/app.js','./assets/reports.js'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>{})));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));

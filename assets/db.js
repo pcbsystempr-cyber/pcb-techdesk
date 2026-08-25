@@ -14,6 +14,7 @@ export const supabase = supabaseClient;
 
 const DEMO_TICKETS_KEY = 'pcb_techdesk_demo_tickets_v2';
 const DEMO_SESSION_KEY = 'pcb_techdesk_demo_session_v2';
+const DEMO_TECHNICIANS_KEY = 'pcb_techdesk_demo_technicians_v2';
 
 function nowISO(){ return new Date().toISOString(); }
 function uid(){ return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
@@ -118,12 +119,18 @@ export async function submitEvaluation(token, rating, comments, suggestions){
 
 export async function signIn(email,password,roleHint='technician'){
   if (DEMO_MODE) {
-    const profile = { id:'demo-user', full_name: roleHint === 'admin' ? 'Administrador Demo' : 'Técnico Demo', role:roleHint };
+    const profile = roleHint === 'admin'
+      ? { id:'demo-admin', full_name:'Administrador Demo', role:'admin' }
+      : { id:'tech-1', full_name:'Alex Rivera', role:'technician' };
     localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(profile)); return profile;
   }
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   const profile = await getProfile(data.user.id);
+  if(profile.role!==roleHint){
+    await supabase.auth.signOut();
+    throw new Error(roleHint==='admin'?'Estas credenciales no pertenecen a un administrador.':'Estas credenciales no pertenecen a un técnico.');
+  }
   return profile;
 }
 export async function signOut(){
@@ -141,13 +148,35 @@ export async function getProfile(id){
   if (error) throw error; return data;
 }
 export async function listTechnicians(){
-  if (DEMO_MODE) return [
-    {id:'tech-1', full_name:'Alex Rivera', role:'technician'},
-    {id:'tech-2', full_name:'Sofía Cruz', role:'technician'},
-    {id:'tech-3', full_name:'Diego López', role:'technician'}
-  ];
+  if (DEMO_MODE) {
+    const session=JSON.parse(localStorage.getItem(DEMO_SESSION_KEY)||'null');
+    if(session?.role!=='admin') throw new Error('Solo administración puede consultar la lista de técnicos.');
+    const defaults=[
+      {id:'tech-1', full_name:'Alex Rivera', role:'technician'},
+      {id:'tech-2', full_name:'Sofía Cruz', role:'technician'},
+      {id:'tech-3', full_name:'Diego López', role:'technician'}
+    ];
+    const saved=JSON.parse(localStorage.getItem(DEMO_TECHNICIANS_KEY)||'null');
+    if(saved) return saved;
+    localStorage.setItem(DEMO_TECHNICIANS_KEY,JSON.stringify(defaults));
+    return defaults;
+  }
   const { data,error } = await supabase.from('profiles').select('id,full_name,role').eq('role','technician').order('full_name');
   if(error) throw error; return data || [];
+}
+
+export async function createTechnician(payload){
+  if(DEMO_MODE){
+    const session=JSON.parse(localStorage.getItem(DEMO_SESSION_KEY)||'null');
+    if(session?.role!=='admin') throw new Error('Solo administración puede añadir técnicos.');
+    const rows=await listTechnicians();
+    if(rows.some(x=>x.email?.toLowerCase()===payload.email.toLowerCase())) throw new Error('Ya existe una cuenta con ese correo.');
+    const technician={id:uid(),full_name:payload.full_name.trim(),email:payload.email.trim().toLowerCase(),role:'technician'};
+    rows.push(technician);localStorage.setItem(DEMO_TECHNICIANS_KEY,JSON.stringify(rows));return technician;
+  }
+  const {data,error}=await supabase.functions.invoke('create-technician',{body:payload});
+  if(error||data?.error) throw new Error(data?.error||error?.message||'No se pudo crear el técnico.');
+  return data.technician;
 }
 
 function seedDemoTickets(){
@@ -173,6 +202,8 @@ function seedDemoTickets(){
 export async function listTickets(filters={}){
   if (DEMO_MODE) {
     let rows = seedDemoTickets();
+    const session=JSON.parse(localStorage.getItem(DEMO_SESSION_KEY)||'null');
+    if(session?.role==='technician') rows=rows.filter(x=>x.assigned_to===session.id);
     if (filters.status) rows = rows.filter(x=>x.status===filters.status);
     if (filters.assigned_to) rows = rows.filter(x=>x.assigned_to===filters.assigned_to);
     if (filters.search) {
@@ -190,7 +221,10 @@ export async function listTickets(filters={}){
 }
 export async function getTicket(id){
   if(DEMO_MODE){
-    const rows=JSON.parse(localStorage.getItem(DEMO_TICKETS_KEY)||'[]'); return rows.find(x=>x.id===id)||null;
+    const rows=JSON.parse(localStorage.getItem(DEMO_TICKETS_KEY)||'[]');
+    const session=JSON.parse(localStorage.getItem(DEMO_SESSION_KEY)||'null');
+    const ticket=rows.find(x=>x.id===id)||null;
+    return ticket&&(session?.role==='admin'||ticket.assigned_to===session?.id)?ticket:null;
   }
   const {data,error}=await supabase.from('tickets').select('*, assigned:profiles!tickets_assigned_to_fkey(id,full_name), attachments:ticket_attachments(*), notes:ticket_notes(*), worklogs:ticket_worklogs(*)').eq('id',id).single();
   if(error) throw error; return {...data,assigned_name:data.assigned?.full_name||null};
@@ -204,6 +238,10 @@ export async function signedAttachmentUrl(path, expiresIn=600){
 export async function updateTicket(id, patch){
   if(DEMO_MODE){
     const rows=JSON.parse(localStorage.getItem(DEMO_TICKETS_KEY)||'[]'); const i=rows.findIndex(x=>x.id===id); if(i<0) throw new Error('Boleta no encontrada');
+    const session=JSON.parse(localStorage.getItem(DEMO_SESSION_KEY)||'null');
+    if('assigned_to' in patch&&session?.role!=='admin') throw new Error('Solo administración puede asignar boletas.');
+    if(patch.status==='closed'&&session?.role!=='admin') throw new Error('Solo administración puede cerrar boletas.');
+    if(session?.role!=='admin'&&rows[i].assigned_to!==session?.id) throw new Error('Esta boleta no está asignada a tu cuenta.');
     rows[i]={...rows[i],...patch,updated_at:nowISO()}; localStorage.setItem(DEMO_TICKETS_KEY,JSON.stringify(rows)); return rows[i];
   }
   if(Object.keys(patch).length===1 && patch.status){
@@ -212,12 +250,8 @@ export async function updateTicket(id, patch){
   throw new Error('Actualización no permitida directamente. Usa una acción segura del sistema.');
 }
 export async function assignTicket(id, technicianId){
-  if(DEMO_MODE) return updateTicket(id,{assigned_to:technicianId,assigned_name:['tech-1','tech-2','tech-3'].includes(technicianId)?({ 'tech-1':'Alex Rivera','tech-2':'Sofía Cruz','tech-3':'Diego López'}[technicianId]):'Técnico',status:'assigned'});
+  if(DEMO_MODE){const tech=(await listTechnicians()).find(x=>x.id===technicianId);if(!tech)throw new Error('Técnico inválido.');return updateTicket(id,{assigned_to:technicianId,assigned_name:tech.full_name,status:'assigned'})}
   const {data,error}=await supabase.rpc('assign_ticket',{p_ticket_id:id,p_technician_id:technicianId}); if(error) throw error; return data;
-}
-export async function claimTicket(id){
-  if(DEMO_MODE) return updateTicket(id,{assigned_to:'demo-user',assigned_name:'Técnico Demo',status:'assigned'});
-  const {data,error}=await supabase.rpc('claim_ticket',{p_ticket_id:id}); if(error) throw error; return data;
 }
 export async function resolveTicket(id, payload){
   if(DEMO_MODE) return updateTicket(id,{...payload,status:'resolved',resolved_at:nowISO()});

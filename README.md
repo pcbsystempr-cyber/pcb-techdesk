@@ -114,6 +114,18 @@ La Edge Function `new-ticket-email` envía una notificación interna después de
 
 Despliega la función con `supabase functions deploy new-ticket-email`. El archivo `supabase/config.toml` permite invocarla con la clave pública moderna de Supabase; dentro de la función se validan esa clave y el token privado de la boleta antes del envío. Para pruebas, Resend permite usar `onboarding@resend.dev` como remitente con las restricciones propias de su modo de prueba. La clave de Resend nunca debe colocarse en `assets/config.js`.
 
+## Cuentas y asignación de técnicos
+
+El login separa las credenciales de administrador y técnico. Solo administración puede crear cuentas técnicas, ver todas las boletas y asignarlas desde el menú desplegable. Cada técnico ve únicamente las boletas asignadas a su cuenta y puede documentarlas y resolverlas.
+
+Para habilitar el botón **Añadir técnico**, despliega la función protegida:
+
+```bash
+supabase functions deploy create-technician
+```
+
+La función valida que quien hace la solicitud tenga un perfil `admin` activo antes de crear el usuario de Supabase Auth. La clave administrativa se usa solamente dentro de la función y nunca se expone en el navegador.
+
 ## Migración del sistema anterior
 
 No recomiendo copiar el sistema anterior completo. Migra **datos**, no la arquitectura.

@@ -279,16 +279,7 @@ begin
   return v;
 end; $$;
 
-create or replace function public.claim_ticket(p_ticket_id uuid)
-returns public.tickets language plpgsql security definer set search_path=public,pg_temp as $$
-declare v public.tickets;
-begin
-  if not exists(select 1 from public.profiles where id=auth.uid() and role='technician' and active=true) then raise exception 'Cuenta de técnico no autorizada.'; end if;
-  update public.tickets set assigned_to=auth.uid(),status='assigned'
-  where id=p_ticket_id and assigned_to is null returning * into v;
-  if v.id is null then raise exception 'La boleta ya está asignada o no existe.'; end if;
-  return v;
-end; $$;
+drop function if exists public.claim_ticket(uuid);
 
 create or replace function public.resolve_ticket(p_ticket_id uuid,p_diagnosis text,p_resolution_summary text,p_root_cause text,p_minutes_spent int,p_parts_used text)
 returns public.tickets language plpgsql security definer set search_path=public,pg_temp as $$
@@ -317,7 +308,7 @@ create or replace function public.close_ticket(p_ticket_id uuid)
 returns public.tickets language plpgsql security definer set search_path=public,pg_temp as $$
 declare v public.tickets;
 begin
-  if not (public.is_admin() or exists(select 1 from public.tickets t join public.profiles p on p.id=auth.uid() where t.id=p_ticket_id and t.assigned_to=auth.uid() and p.role='technician' and p.active=true)) then raise exception 'No autorizado.'; end if;
+  if not public.is_admin() then raise exception 'Solo administración puede cerrar boletas.'; end if;
   update public.tickets set status='closed',closed_at=now(),closed_by=auth.uid() where id=p_ticket_id and status='resolved' returning * into v;
   if v.id is null then raise exception 'La boleta debe estar resuelta antes de cerrarse.'; end if;
   return v;
@@ -395,13 +386,13 @@ alter table public.daily_report_snapshots enable row level security;
 create policy "profiles authenticated read" on public.profiles for select to authenticated using(active=true or public.is_admin());
 create policy "profiles admin update" on public.profiles for update to authenticated using(public.is_admin()) with check(public.is_admin());
 
-create policy "tickets staff read" on public.tickets for select to authenticated using(public.is_admin() or assigned_to=auth.uid() or assigned_to is null);
+create policy "tickets staff read" on public.tickets for select to authenticated using(public.is_admin() or assigned_to=(select auth.uid()));
 
-create policy "attachments staff read" on public.ticket_attachments for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and (t.assigned_to=auth.uid() or t.assigned_to is null)));
-create policy "notes staff read" on public.ticket_notes for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and (t.assigned_to=auth.uid() or t.assigned_to is null)));
-create policy "notes staff insert" on public.ticket_notes for insert to authenticated with check(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=auth.uid()));
-create policy "worklogs staff read" on public.ticket_worklogs for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and (t.assigned_to=auth.uid() or t.assigned_to is null)));
-create policy "history staff read" on public.ticket_status_history for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and (t.assigned_to=auth.uid() or t.assigned_to is null)));
+create policy "attachments staff read" on public.ticket_attachments for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));
+create policy "notes staff read" on public.ticket_notes for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));
+create policy "notes staff insert" on public.ticket_notes for insert to authenticated with check(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));
+create policy "worklogs staff read" on public.ticket_worklogs for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));
+create policy "history staff read" on public.ticket_status_history for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));
 create policy "evaluations admin read" on public.service_evaluations for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=auth.uid()));
 create policy "snapshots admin read" on public.daily_report_snapshots for select to authenticated using(public.is_admin());
 
@@ -417,7 +408,7 @@ create policy "staff evidence read" on storage.objects for select to authenticat
 using(bucket_id='ticket-evidence' and exists(
   select 1 from public.tickets t
   where t.id::text=(storage.foldername(name))[1]
-    and (public.is_admin() or t.assigned_to=auth.uid() or t.assigned_to is null)
+    and (public.is_admin() or t.assigned_to=(select auth.uid()))
 ));
 create policy "staff evidence upload" on storage.objects for insert to authenticated
 with check(bucket_id='ticket-evidence' and exists(
@@ -449,7 +440,6 @@ grant execute on function public.submit_public_evaluation(text,int,text,text) to
 grant execute on function public.valid_public_evidence_path(text) to anon,authenticated;
 grant execute on function public.assign_ticket(uuid,uuid) to authenticated;
 grant execute on function public.set_ticket_status(uuid,text) to authenticated;
-grant execute on function public.claim_ticket(uuid) to authenticated;
 grant execute on function public.resolve_ticket(uuid,text,text,text,int,text) to authenticated;
 grant execute on function public.set_ticket_signoff(uuid,text,text) to authenticated;
 grant execute on function public.close_ticket(uuid) to authenticated;
