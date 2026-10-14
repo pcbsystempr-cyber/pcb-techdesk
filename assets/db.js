@@ -219,6 +219,24 @@ export async function listTickets(filters={}){
   const {data,error}=await q; if(error) throw error;
   return (data||[]).map(x=>({...x,assigned_name:x.assigned?.full_name||null}));
 }
+export async function listSolvedTickets(filters={}){
+  const solved=['resolved','closed'];
+  if(DEMO_MODE){
+    let rows=seedDemoTickets().filter(x=>solved.includes(x.status));
+    if(filters.status) rows=rows.filter(x=>x.status===filters.status);
+    if(filters.search){
+      const s=filters.search.toLowerCase();
+      rows=rows.filter(x=>[x.ticket_no,x.requester_name,x.department,x.category,x.description].some(v=>String(v||'').toLowerCase().includes(s)));
+    }
+    return rows;
+  }
+  let q=supabase.from('tickets').select('*, assigned:profiles!tickets_assigned_to_fkey(id,full_name)').in('status',solved);
+  if(filters.status) q=q.eq('status',filters.status);
+  if(filters.search) q=q.or(`ticket_no.ilike.%${filters.search}%,requester_name.ilike.%${filters.search}%,department.ilike.%${filters.search}%,category.ilike.%${filters.search}%`);
+  q=q.order('created_at',{ascending:false});
+  const {data,error}=await q; if(error) throw error;
+  return (data||[]).map(x=>({...x,assigned_name:x.assigned?.full_name||null}));
+}
 export async function getTicket(id){
   if(DEMO_MODE){
     const rows=JSON.parse(localStorage.getItem(DEMO_TICKETS_KEY)||'[]');

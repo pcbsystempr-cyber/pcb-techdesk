@@ -387,6 +387,7 @@ create policy "profiles authenticated read" on public.profiles for select to aut
 create policy "profiles admin update" on public.profiles for update to authenticated using(public.is_admin()) with check(public.is_admin());
 
 create policy "tickets staff read" on public.tickets for select to authenticated using(public.is_admin() or assigned_to=(select auth.uid()));
+create policy "tickets solved read (all staff)" on public.tickets for select to authenticated using(status in ('resolved','closed'));
 
 create policy "attachments staff read" on public.ticket_attachments for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));
 create policy "notes staff read" on public.ticket_notes for select to authenticated using(public.is_admin() or exists(select 1 from public.tickets t where t.id=ticket_id and t.assigned_to=(select auth.uid())));

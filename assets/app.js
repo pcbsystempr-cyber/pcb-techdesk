@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { DEMO_MODE, getSession, signOut, listTickets, listTechnicians, createTechnician, getTicket, signedAttachmentUrl, updateTicket, assignTicket, resolveTicket, closeTicket, saveTicketSignoff, addTicketNote, subscribeTickets } from './db.js';
+import { DEMO_MODE, getSession, signOut, listTickets, listSolvedTickets, listTechnicians, createTechnician, getTicket, signedAttachmentUrl, updateTicket, assignTicket, resolveTicket, closeTicket, saveTicketSignoff, addTicketNote, subscribeTickets } from './db.js';
 import { qs, qsa, esc, fmtDate, statusPill, priorityPill, statusLabel, isOverdue, toast } from './utils.js';
 
 let profile=null,tickets=[],technicians=[],currentId=null;
@@ -12,7 +12,7 @@ async function boot(){
   qs('#dashboardTitle').textContent=profile.role==='admin'?'Panel administrativo':'Panel del técnico';
   qs('#dashboardSubtitle').textContent=profile.role==='admin'?'Asigna boletas y supervisa todo el servicio técnico':'Consulta y resuelve las boletas que te fueron asignadas';
   qs('#ticketsTitle').textContent=profile.role==='admin'?'Todas las boletas':'Mis boletas asignadas';
-  qs('#ticketsSubtitle').textContent=profile.role==='admin'?'Busca, filtra y asigna las solicitudes del servicio.':'Aquí aparecen únicamente las boletas asignadas a tu cuenta.';
+  qs('#ticketsSubtitle').textContent=profile.role==='admin'?'Busca, filtra y asigna las solicitudes del servicio.':'Tus boletas asignadas y todas las boletas resueltas.';
   const initials=(profile.full_name||'PCB').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
   qs('#userAvatar').textContent=initials||'PCB';
   if(profile.role!=='admin') qsa('[data-admin-only]').forEach(x=>x.classList.add('hidden'));
@@ -48,7 +48,15 @@ async function submitTechnician(e){
 
 async function refresh(){
   const search=qs('#searchInput').value.trim();const status=qs('#statusFilter').value;
-  tickets=await listTickets({search,status:status||undefined,assigned_to:profile.role==='technician'?profile.id:undefined});render(); if(currentId) openTicket(currentId,false);
+  if(profile.role==='technician'){
+    const mine=await listTickets({search,status:status||undefined,assigned_to:profile.id});
+    let solved=await listSolvedTickets({search}); if(status) solved=solved.filter(t=>t.status===status);
+    const byId=new Map(mine.map(t=>[t.id,t])); solved.forEach(t=>byId.set(t.id,t));
+    tickets=[...byId.values()];
+  } else {
+    tickets=await listTickets({search,status:status||undefined});
+  }
+  render(); if(currentId) openTicket(currentId,false);
 }
 
 function startOfToday(){const d=new Date();d.setHours(0,0,0,0);return d}
